@@ -9,7 +9,8 @@ Open `index.html` in a browser. It's a single file with no build step.
 - If `rates.json` is missing or more than 3 hours old, the page fetches live in the browser (Gulf News first) through public relay services. Click **Fetch live** to refresh.
 - Every rate is editable. If the live fetch fails, type the rate in by hand.
 - Inputs: total weight (g), carat, making charges (AED/gram, % of gold value, or flat AED), and VAT % (default 5%).
-- Output: gold value, making charges, amount before tax, VAT, and the total to pay.
+- Output: gold value, making charges, amount before tax, VAT, and the total to pay, each with its % share of the total.
+- Investment view: the premium paid above the gold value (making + VAT) and how much gold must rise to break even.
 - Your last rates and inputs are remembered in the browser.
 
 ### Publishing
