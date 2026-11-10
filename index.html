@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold Price Calculator</title>
+<style>
+  :root {
+    --bg: #faf8f3; --card: #ffffff; --text: #1f1d1a; --muted: #6b665d;
+    --line: #e7e2d6; --gold: #b8860b; --gold-soft: #fbf3dc; --err: #b3261e; --ok: #1e7b34;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --card: #1f1d17; --text: #f2efe6; --muted: #a39d8f;
+            --line: #353126; --gold: #e0b44a; --gold-soft: #2c2715; --err: #f2b8b5; --ok: #8fd19e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 10px 12px; font: inherit; color: var(--text);
+                  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  input:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 0; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .rates { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .rates label { margin-top: 0; }
+  .status { font-size: .85rem; margin-top: 10px; color: var(--muted); }
+  .status.err { color: var(--err); } .status.ok { color: var(--ok); }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--gold);
+           background: var(--gold-soft); color: var(--text); cursor: pointer; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .head h2 { margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  td:last-child { text-align: right; }
+  tr.total td { border-bottom: 0; font-weight: 700; font-size: 1.15rem; padding-top: 12px; }
+  tr.total td:last-child { color: var(--gold); }
+  .note { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  a { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gold Price Calculator</h1>
+  <p class="sub">Rates from <a href="https://dubaicityofgold.com" target="_blank" rel="noopener">dubaicityofgold.com</a>. You can edit every rate.</p>
+
+  <section class="card">
+    <div class="head">
+      <h2>Gold rate (AED per gram)</h2>
+      <button id="refresh" type="button">Fetch live</button>
+    </div>
+    <div class="rates" style="margin-top:12px">
+      <div><label for="r24">24K</label><input id="r24" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      <div><label for="r22">22K</label><input id="r22" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      <div><label for="r21">21K</label><input id="r21" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      <div><label for="r18">18K</label><input id="r18" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      <div><label for="r14">14K</label><input id="r14" type="number" inputmode="decimal" step="0.01" min="0"></div>
+    </div>
+    <div id="status" class="status">Loading live rates…</div>
+  </section>
+
+  <section class="card">
+    <h2>Your purchase</h2>
+    <div class="row">
+      <div><label for="weight">Total weight (grams)</label>
+        <input id="weight" type="number" inputmode="decimal" step="0.001" min="0" placeholder="e.g. 10"></div>
+      <div><label for="karat">Carat</label>
+        <select id="karat">
+          <option value="24">24K</option><option value="22" selected>22K</option>
+          <option value="21">21K</option><option value="18">18K</option><option value="14">14K</option>
+        </select></div>
+    </div>
+    <div class="row">
+      <div><label for="mcType">Making charges type</label>
+        <select id="mcType">
+          <option value="perGram">AED per gram</option>
+          <option value="percent">% of gold value</option>
+          <option value="flat">Flat AED</option>
+        </select></div>
+      <div><label for="mc">Making charges</label>
+        <input id="mc" type="number" inputmode="decimal" step="0.01" min="0" placeholder="e.g. 15"></div>
+    </div>
+    <label for="vat">VAT (%)</label>
+    <input id="vat" type="number" inputmode="decimal" step="0.01" min="0" value="5">
+    <p class="note">UAE VAT on jewellery is 5%, charged on the gold value plus making charges. Investment-grade gold (99%+ purity bars and coins) is often zero-rated, so set VAT to 0 for those.</p>
+  </section>
+
+  <section class="card">
+    <h2>Breakdown</h2>
+    <table>
+      <tr><td>Rate used</td><td id="oRate">–</td></tr>
+      <tr><td>Gold value</td><td id="oGold">–</td></tr>
+      <tr><td>Making charges</td><td id="oMc">–</td></tr>
+      <tr><td><strong>Amount before tax</strong></td><td id="oSub"><strong>–</strong></td></tr>
+      <tr><td id="oVatLabel">VAT</td><td id="oVat">–</td></tr>
+      <tr class="total"><td>Total to pay</td><td id="oTotal">–</td></tr>
+    </table>
+  </section>
+</main>
+
+<script>
+(() => {
+  const SOURCE = 'https://dubaicityofgold.com/';
+  const KARATS = [24, 22, 21, 18, 14];
+  const PURITY = { 24: 0.999, 22: 0.916, 21: 0.875, 18: 0.75, 14: 0.585 };
+  const STORE = 'goldCalc.v1';
+  const $ = id => document.getElementById(id);
+  const fmt = n => 'AED ' + n.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Browsers block a direct cross-site fetch (CORS), so try the site first and then public read-through proxies.
+  const ROUTES = [
+    u => u,
+    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+    u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+  ];
+
+  const load = () => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } };
+  const save = () => {
+    const s = { rates: {} };
+    KARATS.forEach(k => s.rates[k] = $('r' + k).value);
+    ['weight', 'karat', 'mcType', 'mc', 'vat'].forEach(id => s[id] = $(id).value);
+    try { localStorage.setItem(STORE, JSON.stringify(s)); } catch {}
+  };
+
+  function setStatus(msg, cls) { const el = $('status'); el.textContent = msg; el.className = 'status ' + (cls || ''); }
+
+  // Pull "24K ... 512.25"-style pairs out of the page text. Only plausible AED/gram values are accepted.
+  function parseRates(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script,style,noscript').forEach(n => n.remove());
+    // Join text nodes with spaces so "<div>24K</div><div>512.75</div>" reads as "24K 512.75".
+    const parts = [];
+    const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) parts.push(walker.currentNode.nodeValue);
+    const text = parts.join(' ').replace(/\s+/g, ' ');
+    const found = {};
+    for (const k of KARATS) {
+      const re = new RegExp('\\b' + k + '\\s*(?:Karat|Carat|KT|Ct|K)[^0-9]{0,60}?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,3})?|\\d+(?:\\.\\d{1,3})?)', 'gi');
+      let m;
+      while ((m = re.exec(text))) {
+        const v = parseFloat(m[1].replace(/,/g, ''));
+        if (v >= 50 && v <= 5000) { found[k] = v; break; }
+      }
+    }
+    return found;
+  }
+
+  async function fetchRates() {
+    setStatus('Fetching live rates…');
+    for (const route of ROUTES) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10000);
+        const res = await fetch(route(SOURCE), { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(t);
+        if (!res.ok) continue;
+        const rates = parseRates(await res.text());
+        if (!Object.keys(rates).length) continue;
+        // Fill any karat the site didn't list from the 24K rate by purity.
+        if (rates[24]) KARATS.forEach(k => { if (!rates[k]) rates[k] = +(rates[24] * PURITY[k] / PURITY[24]).toFixed(2); });
+        KARATS.forEach(k => { if (rates[k]) $('r' + k).value = rates[k]; });
+        save(); calc();
+        setStatus('Live rates loaded ' + new Date().toLocaleString('en-AE') + '. Edit any value to override it.', 'ok');
+        return;
+      } catch { /* try next route */ }
+    }
+    setStatus('Couldn\'t fetch live rates. Enter today\'s rate from dubaicityofgold.com by hand. The last values you saved are shown.', 'err');
+  }
+
+  function calc() {
+    const karat = +$('karat').value;
+    const rate = parseFloat($('r' + karat).value) || 0;
+    const w = parseFloat($('weight').value) || 0;
+    const mcVal = parseFloat($('mc').value) || 0;
+    const vatPct = parseFloat($('vat').value) || 0;
+    const gold = rate * w;
+    const mc = { perGram: mcVal * w, percent: gold * mcVal / 100, flat: mcVal }[$('mcType').value];
+    const sub = gold + mc;
+    const vat = sub * vatPct / 100;
+    $('oRate').textContent = rate ? fmt(rate) + ' /g (' + karat + 'K)' : '–';
+    $('oGold').textContent = fmt(gold);
+    $('oMc').textContent = fmt(mc);
+    $('oSub').innerHTML = '<strong>' + fmt(sub) + '</strong>';
+    $('oVatLabel').textContent = 'VAT (' + vatPct + '%)';
+    $('oVat').textContent = fmt(vat);
+    $('oTotal').textContent = fmt(sub + vat);
+  }
+
+  // Restore the last session, then wire up inputs.
+  const s = load();
+  if (s.rates) KARATS.forEach(k => { if (s.rates[k]) $('r' + k).value = s.rates[k]; });
+  ['weight', 'karat', 'mcType', 'mc', 'vat'].forEach(id => { if (s[id] != null && s[id] !== '') $(id).value = s[id]; });
+  document.querySelectorAll('input,select').forEach(el => el.addEventListener('input', () => { save(); calc(); }));
+  $('refresh').addEventListener('click', fetchRates);
+  calc();
+  fetchRates();
+})();
+</script>
+</body>
+</html>
