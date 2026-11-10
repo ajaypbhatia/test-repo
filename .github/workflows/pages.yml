@@ -1,0 +1,50 @@
+# Publishes the calculator to GitHub Pages with a fresh rates.json.
+# Fetching rates here, on GitHub's servers, avoids the browser's cross-site (CORS) block,
+# so the page loads rates instantly from its own site instead of through public relays.
+# Requires Settings > Pages > Source: "GitHub Actions".
+name: Deploy site with gold rates
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes (GitHub may run scheduled jobs a few minutes late)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+      - name: Fetch gold rates
+        run: node scripts/fetch-rates.mjs _site/rates.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
