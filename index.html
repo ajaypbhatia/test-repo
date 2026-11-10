@@ -46,7 +46,7 @@
 <body>
 <main>
   <h1>Gold Price Calculator</h1>
-  <p class="sub">Rates from <a href="https://dubaicityofgold.com" target="_blank" rel="noopener">dubaicityofgold.com</a>. You can edit every rate.</p>
+  <p class="sub">Rates from <a href="https://dubaicityofgold.com" target="_blank" rel="noopener">dubaicityofgold.com</a>, with <a href="https://gulfnews.com/gold-forex/historical-gold-rates" target="_blank" rel="noopener">Gulf News</a> as backup. You can edit every rate.</p>
 
   <section class="card">
     <div class="head">
@@ -104,7 +104,6 @@
 
 <script>
 (() => {
-  const SOURCE = 'https://dubaicityofgold.com/';
   const KARATS = [24, 22, 21, 18, 14];
   const PURITY = { 24: 0.999, 22: 0.916, 21: 0.875, 18: 0.75, 14: 0.585 };
   const STORE = 'goldCalc.v1';
@@ -129,8 +128,10 @@
 
   function setStatus(msg, cls) { const el = $('status'); el.textContent = msg; el.className = 'status ' + (cls || ''); }
 
-  // Pull "24K ... 512.25"-style pairs out of the page text. Only plausible AED/gram values are accepted.
-  function parseRates(html) {
+  const plausible = v => v >= 50 && v <= 5000;  // AED per gram
+
+  // Dubai City of Gold: pull "24K ... 512.25"-style pairs out of the page text.
+  function parseDcog(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     doc.querySelectorAll('script,style,noscript').forEach(n => n.remove());
     // Join text nodes with spaces so "<div>24K</div><div>512.75</div>" reads as "24K 512.75".
@@ -144,32 +145,75 @@
       let m;
       while ((m = re.exec(text))) {
         const v = parseFloat(m[1].replace(/,/g, ''));
-        if (v >= 50 && v <= 5000) { found[k] = v; break; }
+        if (plausible(v)) { found[k] = v; break; }
       }
     }
-    return found;
+    return { rates: found };
+  }
+
+  // Gulf News: a table with a "Date | 24 Carat | 22 Carat | ..." header and one row per day. Use the newest date.
+  function parseGulfNews(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const table of doc.querySelectorAll('table')) {
+      const heads = [...table.querySelectorAll('thead th, tr:first-child th')].map(th => th.textContent.trim());
+      const cols = {};
+      heads.forEach((h, i) => { const m = h.match(/^(\d{2})\s*(?:Carat|Karat|K)/i); if (m && KARATS.includes(+m[1])) cols[+m[1]] = i; });
+      if (!Object.keys(cols).length) continue;
+      let best = null;
+      for (const tr of table.querySelectorAll('tbody tr')) {
+        const cells = [...tr.querySelectorAll('td')].map(td => td.textContent.trim());
+        if (cells.length < heads.length) continue;
+        const label = cells[0];
+        const time = Date.parse(label.replace(/(\d+)(st|nd|rd|th)/i, '$1'));
+        if (!best || (time > best.time)) best = { label, time, cells };
+      }
+      if (!best) continue;
+      const rates = {};
+      for (const k in cols) {
+        const v = parseFloat(best.cells[cols[k]].replace(/,/g, ''));
+        if (plausible(v)) rates[k] = v;
+      }
+      if (Object.keys(rates).length) return { rates, date: best.label };
+    }
+    return { rates: {} };
+  }
+
+  // Tried in order: Dubai City of Gold first, Gulf News as the backup.
+  const SOURCES = [
+    { name: 'Dubai City of Gold', url: 'https://dubaicityofgold.com/', parse: parseDcog },
+    { name: 'Gulf News', url: 'https://gulfnews.com/gold-forex/historical-gold-rates', parse: parseGulfNews },
+  ];
+
+  async function tryFetch(url) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+      return res.ok ? await res.text() : null;
+    } finally { clearTimeout(t); }
   }
 
   async function fetchRates() {
     setStatus('Fetching live rates…');
-    for (const route of ROUTES) {
-      try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 10000);
-        const res = await fetch(route(SOURCE), { signal: ctrl.signal, cache: 'no-store' });
-        clearTimeout(t);
-        if (!res.ok) continue;
-        const rates = parseRates(await res.text());
-        if (!Object.keys(rates).length) continue;
-        // Fill any karat the site didn't list from the 24K rate by purity.
-        if (rates[24]) KARATS.forEach(k => { if (!rates[k]) rates[k] = +(rates[24] * PURITY[k] / PURITY[24]).toFixed(2); });
-        KARATS.forEach(k => { if (rates[k]) $('r' + k).value = rates[k]; });
-        save(); calc();
-        setStatus('Live rates loaded ' + new Date().toLocaleString('en-AE') + '. Edit any value to override it.', 'ok');
-        return;
-      } catch { /* try next route */ }
+    for (const src of SOURCES) {
+      for (const route of ROUTES) {
+        try {
+          const html = await tryFetch(route(src.url));
+          if (!html) continue;
+          const { rates, date } = src.parse(html);
+          if (!Object.keys(rates).length) continue;
+          // Fill any karat the source didn't list (e.g. 14K on Gulf News) from the 24K rate by purity.
+          const derived = [];
+          if (rates[24]) KARATS.forEach(k => { if (!rates[k]) { rates[k] = +(rates[24] * PURITY[k] / PURITY[24]).toFixed(2); derived.push(k + 'K'); } });
+          KARATS.forEach(k => { if (rates[k]) $('r' + k).value = rates[k]; });
+          save(); calc();
+          setStatus('Live rates from ' + src.name + (date ? ' for ' + date : '') + ', loaded ' + new Date().toLocaleString('en-AE') + '.' +
+            (derived.length ? ' ' + derived.join(', ') + ' estimated from 24K purity.' : '') + ' Edit any value to override it.', 'ok');
+          return;
+        } catch { /* try next route */ }
+      }
     }
-    setStatus('Couldn\'t fetch live rates. Enter today\'s rate from dubaicityofgold.com by hand. The last values you saved are shown.', 'err');
+    setStatus('Couldn\'t fetch live rates from Dubai City of Gold or Gulf News. Enter today\'s rate by hand. The last values you saved are shown.', 'err');
   }
 
   function calc() {
