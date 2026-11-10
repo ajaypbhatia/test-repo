@@ -36,9 +36,12 @@
   .head h2 { margin: 0; }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   td { padding: 8px 0; border-bottom: 1px solid var(--line); }
-  td:last-child { text-align: right; }
+  td:last-child { text-align: right; white-space: nowrap; padding-left: 12px; }
   tr.total td { border-bottom: 0; font-weight: 700; font-size: 1.15rem; padding-top: 12px; }
   tr.total td:last-child { color: var(--gold); }
+  .pct { color: var(--muted); font-size: .85rem; margin-left: 6px; }
+  .invest { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .invest h3 { font-size: .95rem; margin: 0 0 4px; }
   .note { font-size: .8rem; color: var(--muted); margin-top: 8px; }
   a { color: var(--gold); }
 </style>
@@ -99,6 +102,14 @@
       <tr><td id="oVatLabel">VAT</td><td id="oVat">–</td></tr>
       <tr class="total"><td>Total to pay</td><td id="oTotal">–</td></tr>
     </table>
+    <div class="invest">
+      <h3>Investment view</h3>
+      <table>
+        <tr><td>Premium (making + VAT)</td><td id="oPrem">–</td></tr>
+        <tr><td>Break-even gold rise</td><td id="oBreak">–</td></tr>
+      </table>
+      <p class="note">Gold is the part you can get back when you sell. Making charges and VAT are usually not refunded. Shops also often buy back slightly below their selling rate, so the real break-even is a little higher.</p>
+    </div>
   </section>
 </main>
 
@@ -258,12 +269,18 @@
     const sub = gold + mc;
     const vat = sub * vatPct / 100;
     $('oRate').textContent = rate ? fmt(rate) + ' /g (' + karat + 'K)' : '–';
-    $('oGold').textContent = fmt(gold);
-    $('oMc').textContent = fmt(mc);
-    $('oSub').innerHTML = '<strong>' + fmt(sub) + '</strong>';
+    const total = sub + vat;
+    // Share of the total, shown next to each amount. Blank until there's a total.
+    const share = n => total > 0 ? '<span class="pct">' + (n / total * 100).toFixed(1) + '%</span>' : '';
+    const withPct = (id, n) => { $(id).innerHTML = fmt(n) + share(n); };
+    withPct('oGold', gold);
+    withPct('oMc', mc);
+    $('oSub').innerHTML = '<strong>' + fmt(sub) + '</strong>' + share(sub);
     $('oVatLabel').textContent = 'VAT (' + vatPct + '%)';
-    $('oVat').textContent = fmt(vat);
-    $('oTotal').textContent = fmt(sub + vat);
+    withPct('oVat', vat);
+    $('oTotal').textContent = fmt(total);
+    withPct('oPrem', mc + vat);
+    $('oBreak').textContent = gold > 0 ? ((total / gold - 1) * 100).toFixed(1) + '%' : '–';
   }
 
   // Restore the last session, then wire up inputs.
